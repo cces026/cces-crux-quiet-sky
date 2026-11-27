@@ -421,7 +421,7 @@ function buildLights() {
 }
 function lightLevel(lt, t) {
   const a = clamp((L - lt.th) / 0.3); if (a <= 0) return 0;
-  return a * (0.9 + 0.1 * Math.sin(t * lt.sp + lt.ph)) * (1 + 0.4 * nFast);       // 一出聲就更刺眼：聲音變成光
+  return a * (0.9 + 0.1 * Math.sin(t * lt.sp + lt.ph)) * (1 + 0.3 * nGlow);       // 音量大一陣子，燈慢慢更刺眼：聲音變成光
 }
 function drawLightCores(t) {
   ctx.globalCompositeOperation = 'lighter';
@@ -490,7 +490,7 @@ function micErrorText(e) {
 function setNoSignal(msg) { noSignal = !!msg; $('warn').style.display = msg ? 'block' : 'none'; if (msg) $('warnText').textContent = msg + ' 現在的星空不代表教室很安靜。'; }
 
 // ───────────────────────── 狀態：光害 P（慢）與畫面亮度 L（快） ─────────────────────────
-let debt = 0, adapt = 0, P = 0, L = 0, nFast = 0, streak = 0, best = 0, meteorsSeen = 0, NELM = 7.35, running = false, spaceDown = false, calibrating = false;
+let debt = 0, adapt = 0, P = 0, L = 0, nFast = 0, nGlow = 0, streak = 0, best = 0, meteorsSeen = 0, NELM = 7.35, running = false, spaceDown = false, calibrating = false;
 const forceP = Q.has('p') ? clamp(+Q.get('p')) : null;
 if (Q.has('streak')) streak = +Q.get('streak') || 0;
 function thresholds() { const floor = S.floor == null ? -62 : S.floor; const q = floor + 7 + (S.tol - 5) * 3; return { floor, q, range: 20 }; }
@@ -513,13 +513,15 @@ function update(dt, t) {
   }
   if (spaceDown) n = Math.max(n, 1);
   nFast = n;
+  // 燈光的反應不要太靈敏（使用者 11/27 第三版）：音量先平滑成 nGlow，約 1.5 秒才跟上、2 秒才退
+  nGlow += (n - nGlow) * (1 - Math.exp(-dt / (n > nGlow ? 1.5 : 2)));
   if (forceP != null) { P = forceP; L = forceP; }
   else {
     // 光害停留：音量大（n ≥ 0.3）的時候記帳，大聲 1 秒＝停留 3 秒（最多 45 秒）；音量小下來先把停留時間倒數完，光害才開始退
     if (n >= 0.3) debt = Math.min(45, debt + dt * 3 * n); else debt = Math.max(0, debt - dt);
-    if (n > P) P += (n - P) * (1 - Math.exp(-dt / 3));      // 音量大持續幾秒，光害才會升上去（咳一聲不會毀掉星空）
+    if (n > P) P += (n - P) * (1 - Math.exp(-dt / 8));      // 慢慢亮起來：音量大持續約 8 秒，光害才升到六成多（第三版從 3 秒放慢）
     else if (debt <= 0) P = Math.max(n, P - dt / S.rec);    // 停留時間過了，光害才慢慢退
-    L = P + (1 - P) * 0.45 * n;                             // 一出聲，燈馬上亮一下：聲音變成光
+    L = P + (1 - P) * 0.3 * nGlow;                          // 音量大的時候，遠方的燈跟著慢慢亮一些：聲音變成光
   }
   if (running && !calibrating && !noSignal) {
     if (L < 0.12) streak += dt; else if (P > 0.3 && streak > 0) { streak = 0; onStreakReset(); }
